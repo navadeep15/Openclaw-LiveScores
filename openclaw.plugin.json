@@ -1,0 +1,67 @@
+{
+  "id": "cricket-live-scores",
+  "name": "Cricket Live Scores",
+  "description": "IPL and cricket live score subscriptions for WhatsApp, Telegram, and other OpenClaw chat channels.",
+  "version": "1.0.0",
+  "uiHints": {
+    "cricbuzzBaseUrl": {
+      "label": "Cricbuzz base URL",
+      "help": "Override only if you proxy or mirror Cricbuzz pages."
+    },
+    "pollIntervalMs": {
+      "label": "Live poll interval",
+      "help": "How often to refresh live matches for active subscriptions."
+    },
+    "preMatchPollIntervalMs": {
+      "label": "Pre-match poll interval",
+      "help": "How often to refresh subscriptions before a match goes live."
+    },
+    "defaultQuery": {
+      "label": "Default match query",
+      "help": "Used by /ipl and as the fallback filter for /cricket matches."
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "cricbuzzBaseUrl": {
+        "type": "string",
+        "minLength": 1
+      },
+      "pollIntervalMs": {
+        "type": "integer",
+        "minimum": 5000,
+        "maximum": 120000
+      },
+      "preMatchPollIntervalMs": {
+        "type": "integer",
+        "minimum": 10000,
+        "maximum": 300000
+      },
+      "requestTimeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 30000
+      },
+      "defaultQuery": {
+        "type": "string"
+      },
+      "listLimit": {
+        "type": "integer",
+        "minimum": 3,
+        "maximum": 30
+      },
+      "maxSubscriptionsPerChat": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 20
+      },
+      "lookupCacheTtlMs": {
+        "type": "integer",
+        "minimum": 60000,
+        "maximum": 1800000
+      }
+    }
+  }
+}

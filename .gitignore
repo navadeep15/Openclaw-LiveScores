@@ -1,0 +1,8 @@
+dist/
+node_modules/
+coverage/
+.DS_Store
+_tmp_cricbuzz_live/
+_tmp_sanweb_cricket_api/
+package/
+openclaw-*.tgz
