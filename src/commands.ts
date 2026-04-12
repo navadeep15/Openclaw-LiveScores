@@ -1,11 +1,11 @@
-import type { CommandPreset, CricketSubscription, MatchStatus, NormalizedMatch, SubscriptionMode } from "./models.js";
+import type { ChatTarget, CommandPreset, CricketSubscription, MatchStatus, NormalizedMatch, SubscriptionMode } from "./models.js";
 import type { CommandContextLike, CommandResponseLike, PluginApiLike } from "./openclaw.js";
 import type { CricbuzzProvider } from "./cricbuzz-provider.js";
 import type { CricketStateStore } from "./state.js";
 import { resolvePluginConfig } from "./config.js";
 import { formatHelp, formatMatches, formatModeUpdated, formatScoreSnapshot, formatSubscribeAck, formatSubscriptionList, formatUnsubscribeResult } from "./formatting.js";
 import { toCompactLiveSnapshot } from "./live-state.js";
-import { cleanText, normalizeSelectionToken, parseCommandTokens, resolveChatTarget } from "./utils.js";
+import { cleanText, normalizeSelectionToken, parseCommandTokens, resolveChatTarget, sameChatConversation } from "./utils.js";
 
 function resolveMode(input: string | undefined): SubscriptionMode | null {
   const value = cleanText(input).toLowerCase();
@@ -56,8 +56,8 @@ function resolveLookupSelection(selection: string, matches: NormalizedMatch[]): 
   return matches.find((item) => item.id === selection) ?? null;
 }
 
-function findTargetSubscriptions(subscriptions: CricketSubscription[], targetKey: string): CricketSubscription[] {
-  return subscriptions.filter((item) => item.target.key === targetKey);
+function findTargetSubscriptions(subscriptions: CricketSubscription[], chatTarget: ChatTarget): CricketSubscription[] {
+  return subscriptions.filter((item) => sameChatConversation(item.target, chatTarget));
 }
 
 function isAmbiguousListSelection(selection: string, api: PluginApiLike): boolean {
@@ -118,7 +118,7 @@ export function createCommandHandler(api: PluginApiLike, store: CricketStateStor
     if (action === "subscriptions" || action === "subs" || action === "status") {
       const state = await store.read();
       return {
-        text: formatSubscriptionList(findTargetSubscriptions(state.subscriptions, chatTarget.key), preset)
+        text: formatSubscriptionList(findTargetSubscriptions(state.subscriptions, chatTarget), preset)
       };
     }
 
@@ -194,7 +194,7 @@ export function createCommandHandler(api: PluginApiLike, store: CricketStateStor
         return { text: `Cannot subscribe to ${match.title} because it already appears to be complete.` };
       }
 
-      const currentSubscriptions = findTargetSubscriptions(state.subscriptions, chatTarget.key);
+      const currentSubscriptions = findTargetSubscriptions(state.subscriptions, chatTarget);
       const existing = currentSubscriptions.find((item) => item.matchId === match.id);
 
       if (!existing && currentSubscriptions.length >= resolvePluginConfig(api.pluginConfig).maxSubscriptionsPerChat) {
@@ -219,12 +219,8 @@ export function createCommandHandler(api: PluginApiLike, store: CricketStateStor
       };
 
       await store.mutate((draft) => {
-        const index = draft.subscriptions.findIndex((item) => item.id === nextSubscription.id);
-        if (index === -1) {
-          draft.subscriptions.push(nextSubscription);
-        } else {
-          draft.subscriptions[index] = nextSubscription;
-        }
+        draft.subscriptions = draft.subscriptions.filter((item) => !(sameChatConversation(item.target, chatTarget) && item.matchId === match.id));
+        draft.subscriptions.push(nextSubscription);
       });
 
       return {
@@ -233,7 +229,7 @@ export function createCommandHandler(api: PluginApiLike, store: CricketStateStor
     }
 
     if (action === "unsubscribe" || action === "unsub" || action === "remove") {
-      const selection = cleanText(tokens[1]);
+      const selection = normalizeSelectionToken(tokens[1]);
 
       if (!selection) {
         return {
@@ -242,14 +238,14 @@ export function createCommandHandler(api: PluginApiLike, store: CricketStateStor
       }
 
       const state = await store.read();
-      const scoped = findTargetSubscriptions(state.subscriptions, chatTarget.key);
+      const scoped = findTargetSubscriptions(state.subscriptions, chatTarget);
 
       let removed = 0;
 
       await store.mutate((draft) => {
         if (selection.toLowerCase() === "all") {
-          removed = draft.subscriptions.filter((item) => item.target.key === chatTarget.key).length;
-          draft.subscriptions = draft.subscriptions.filter((item) => item.target.key !== chatTarget.key);
+          removed = draft.subscriptions.filter((item) => sameChatConversation(item.target, chatTarget)).length;
+          draft.subscriptions = draft.subscriptions.filter((item) => !sameChatConversation(item.target, chatTarget));
           return;
         }
 
@@ -260,8 +256,8 @@ export function createCommandHandler(api: PluginApiLike, store: CricketStateStor
         if (scopedSelection) {
           removedIds.add(scopedSelection.id);
         } else {
-          scoped
-            .filter((item) => item.matchId === selection)
+          draft.subscriptions
+            .filter((item) => sameChatConversation(item.target, chatTarget) && item.matchId === selection)
             .forEach((item) => {
               removedIds.add(item.id);
             });
@@ -275,7 +271,7 @@ export function createCommandHandler(api: PluginApiLike, store: CricketStateStor
     }
 
     if (action === "mode") {
-      const selection = cleanText(tokens[1]);
+      const selection = normalizeSelectionToken(tokens[1]);
       const mode = resolveMode(tokens[2]);
 
       if (!selection || mode === null) {
@@ -285,7 +281,7 @@ export function createCommandHandler(api: PluginApiLike, store: CricketStateStor
       }
 
       const state = await store.read();
-      const scoped = findTargetSubscriptions(state.subscriptions, chatTarget.key);
+      const scoped = findTargetSubscriptions(state.subscriptions, chatTarget);
       const numeric = Number.parseInt(selection, 10);
       const scopedSelection = Number.isFinite(numeric) && numeric >= 1 && numeric <= scoped.length ? scoped[numeric - 1] : null;
       const existing = scopedSelection ?? scoped.find((item) => item.matchId === selection);

@@ -85,6 +85,11 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
         };
 
         if (snapshot.status === "completed") {
+          if (!(await store.hasSubscription(subscription.id))) {
+            patches.set(subscription.id, null);
+            continue;
+          }
+
           try {
             await sendText(api, subscription, formatCompletionMessage(basePatch, snapshot));
             patches.set(subscription.id, null);
@@ -103,6 +108,11 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
         }
 
         try {
+          if (!(await store.hasSubscription(subscription.id))) {
+            patches.set(subscription.id, null);
+            continue;
+          }
+
           await sendText(api, subscription, formatDeliveryMessage(subscription, update));
           basePatch.lastSnapshot = snapshot;
           patches.set(subscription.id, basePatch);

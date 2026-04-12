@@ -1,5 +1,5 @@
 import type { CompactLiveSnapshot, DeliveryUpdate } from "./models.js";
-import { ballRangeLabel } from "./utils.js";
+import { ballsToLabel, cleanText } from "./utils.js";
 
 function describeRuns(runsDelta: number, ballSpan: number): string {
   if (ballSpan > 1) {
@@ -22,6 +22,59 @@ function describeRuns(runsDelta: number, ballSpan: number): string {
     default:
       return `+${runsDelta} runs`;
   }
+}
+
+function summarizeCommentary(commentary: string | undefined): string | undefined {
+  const value = cleanText(commentary);
+  if (!value) {
+    return undefined;
+  }
+
+  if (/\b(run out|stumped|lbw|bowled|caught|wicket)\b/i.test(value)) {
+    return "WICKET";
+  }
+
+  if (/\bno ball\b/i.test(value)) {
+    return "NO BALL";
+  }
+
+  if (/\bwide\b/i.test(value)) {
+    return "WIDE";
+  }
+
+  if (/\bleg byes?\b/i.test(value)) {
+    return "LEG BYE";
+  }
+
+  if (/\bbyes?\b/i.test(value)) {
+    return "BYE";
+  }
+
+  if (/\bfour\b/i.test(value)) {
+    return "FOUR";
+  }
+
+  if (/\bsix\b/i.test(value)) {
+    return "SIX";
+  }
+
+  if (/\b(dot ball|no run)\b/i.test(value)) {
+    return "Dot ball";
+  }
+
+  if (/\b(single|1 run|one run)\b/i.test(value)) {
+    return "1 run";
+  }
+
+  if (/\b(couple|2 runs|two runs)\b/i.test(value)) {
+    return "2 runs";
+  }
+
+  if (/\b(3 runs|three runs)\b/i.test(value)) {
+    return "3 runs";
+  }
+
+  return undefined;
 }
 
 function detectDismissedBatter(previous: CompactLiveSnapshot | undefined, current: CompactLiveSnapshot): string | undefined {
@@ -54,7 +107,7 @@ function detectFacingBatter(previous: CompactLiveSnapshot | undefined, current: 
 }
 
 function buildCommentary(previous: CompactLiveSnapshot | undefined, current: CompactLiveSnapshot, runsDelta: number, wicketDelta: number, ballSpan: number): string {
-  if (ballSpan === 1 && current.latestCommentary) {
+  if (current.latestCommentary) {
     return current.latestCommentary;
   }
 
@@ -63,7 +116,7 @@ function buildCommentary(previous: CompactLiveSnapshot | undefined, current: Com
 
   if (ballSpan > 1) {
     const wicketText = wicketDelta > 0 ? ` and ${wicketDelta} wicket${wicketDelta === 1 ? "" : "s"}` : "";
-    return `Snapshot jump: ${runsDelta} run${runsDelta === 1 ? "" : "s"}${wicketText} across ${ballSpan} balls.`;
+    return `Score updated by ${runsDelta} run${runsDelta === 1 ? "" : "s"}${wicketText}. Latest ball commentary was unavailable.`;
   }
 
   if (wicketDelta > 0) {
@@ -88,6 +141,47 @@ function buildCommentary(previous: CompactLiveSnapshot | undefined, current: Com
     default:
       return `${runsDelta} runs added on the ball.`;
   }
+}
+
+function resolveBallLabel(current: CompactLiveSnapshot, currentBalls: number, fromBall: number, toBall: number): string {
+  if (current.oversText) {
+    return current.oversText;
+  }
+
+  if (currentBalls > 0) {
+    return ballsToLabel(currentBalls);
+  }
+
+  if (toBall > 0) {
+    return ballsToLabel(toBall);
+  }
+
+  return ballsToLabel(fromBall);
+}
+
+function resolveShortResult(current: CompactLiveSnapshot, runsDelta: number, wicketDelta: number, ballSpan: number): string {
+  const fromCommentary = summarizeCommentary(current.latestCommentary);
+  if (fromCommentary) {
+    if (wicketDelta > 0 && fromCommentary !== "WICKET") {
+      return `${fromCommentary}, WICKET`;
+    }
+
+    return fromCommentary;
+  }
+
+  if (ballSpan > 1) {
+    if (wicketDelta > 0 && runsDelta > 0) {
+      return `Score update (+${runsDelta}), WICKET`;
+    }
+
+    if (wicketDelta > 0) {
+      return "WICKET";
+    }
+
+    return runsDelta > 0 ? `Score update (+${runsDelta})` : "Score update";
+  }
+
+  return wicketDelta > 0 ? `${describeRuns(runsDelta, ballSpan)}${runsDelta > 0 ? ", " : ""}WICKET` : describeRuns(runsDelta, ballSpan);
 }
 
 export function inferDeliveryUpdate(previous: CompactLiveSnapshot | undefined, current: CompactLiveSnapshot): DeliveryUpdate | null {
@@ -128,12 +222,12 @@ export function inferDeliveryUpdate(previous: CompactLiveSnapshot | undefined, c
   }
 
   const toBall = Math.max(fromBall, currentBalls);
-  const shortResult = wicketDelta > 0 ? `${describeRuns(runsDelta, ballSpan)}${runsDelta > 0 ? ", " : ""}WICKET` : describeRuns(runsDelta, ballSpan);
+  const shortResult = resolveShortResult(current, runsDelta, wicketDelta, ballSpan);
   const commentary = buildCommentary(previous, current, runsDelta, wicketDelta, ballSpan);
 
   return {
     key: `${current.teamLabel ?? "team"}|${currentRuns}|${currentWickets}|${currentBalls}|${current.batsmen.map((item) => `${item.name}:${item.runs ?? 0}:${item.balls ?? 0}`).join("|")}`,
-    ballLabel: ballRangeLabel(fromBall, toBall),
+    ballLabel: resolveBallLabel(current, currentBalls, fromBall, toBall),
     ballSpan,
     runsDelta,
     wicketDelta,

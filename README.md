@@ -18,6 +18,12 @@ This plugin works without an external cricket API key. It scrapes public Cricbuz
 
 The subscription is bound to the current OpenClaw chat target, so updates go back into the same WhatsApp or Telegram conversation.
 
+Mode behavior:
+
+- `balls` sends only the score update lines for the latest detected ball.
+- `commentary` sends the same score update plus the latest scraped ball commentary text when Cricbuzz exposes it.
+- If polling misses intermediate balls, the plugin reports the latest known ball cleanly instead of sending a range-based snapshot summary.
+
 ## Install
 
 1. Build the plugin:
@@ -40,6 +46,8 @@ openclaw plugins enable cricket-live-scores
 openclaw channels login --channel telegram
 openclaw channels login --channel whatsapp
 ```
+
+The plugin uses OpenClaw's outbound text adapter, so it is channel-agnostic. If Telegram works and WhatsApp is linked correctly in OpenClaw, the same `/ipl ...` and `/cricket ...` commands work in WhatsApp too.
 
 ## Optional config
 
@@ -86,6 +94,8 @@ Add this under `plugins.entries.cricket-live-scores.config` in your OpenClaw con
 
 - Delivery is near-live, not a licensed official ball feed. Ball events are inferred from changes in the public live score snapshot.
 - `/... score` is the one-shot command. `/... subscribe` is the continuous auto-push command.
-- Commentary mode prefers the latest scraped Cricbuzz ball text when it is available. If a polling jump covers multiple balls, the plugin falls back to a generated summary for that range.
-- If a polling gap covers multiple deliveries, the plugin sends a bundled update for that ball range.
+- `balls` mode does not append commentary text.
+- Commentary mode prefers the latest scraped Cricbuzz ball text when it is available. If Cricbuzz does not expose commentary for the latest poll, the plugin falls back to a short generated line.
 - Numbered selections such as `1` depend on a recent `/ipl matches` or `/cricket matches` result. If that list is stale, run the match list command again or use the full matchId.
+- These slash commands are custom plugin commands, so they bypass the LLM. Gemini or Groq quota matters for general assistant chat, but not for the core `/ipl` or `/cricket` command handling in this plugin.
+- Always-on Telegram or WhatsApp delivery needs a continuously running OpenClaw gateway. That is a deployment concern outside the plugin code itself.

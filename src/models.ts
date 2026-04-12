@@ -89,7 +89,7 @@ export interface DeliveryUpdate {
   runsDelta: number;
   wicketDelta: number;
   shortResult: string;
-  commentary: string;
+  commentary?: string;
   facingBatter?: string;
   dismissedBatter?: string;
   current: CompactLiveSnapshot;

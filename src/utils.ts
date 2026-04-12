@@ -18,6 +18,26 @@ export function buildTargetKey(target: Omit<ChatTarget, "key">): string {
   ].join("|");
 }
 
+export function sameChatConversation(left: Pick<ChatTarget, "channel" | "to" | "accountId" | "threadId">, right: Pick<ChatTarget, "channel" | "to" | "accountId" | "threadId">): boolean {
+  if (normalizeText(left.channel) !== normalizeText(right.channel)) {
+    return false;
+  }
+
+  if (cleanText(left.to) !== cleanText(right.to)) {
+    return false;
+  }
+
+  if (cleanText(left.accountId) !== cleanText(right.accountId)) {
+    return false;
+  }
+
+  if (right.threadId == null || right.threadId === "") {
+    return true;
+  }
+
+  return String(left.threadId ?? "") === String(right.threadId);
+}
+
 export function resolveChatTarget(ctx: CommandContextLike): ChatTarget | null {
   const channel = cleanText(ctx.channel);
   const to = cleanText(ctx.from) || cleanText(ctx.to) || cleanText(ctx.senderId);

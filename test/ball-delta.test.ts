@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { inferDeliveryUpdate } from "../src/ball-delta.js";
 import { matchesQueryFilter } from "../src/cricbuzz-provider.js";
-import type { CompactLiveSnapshot, NormalizedMatch } from "../src/models.js";
+import { formatDeliveryMessage, formatScoreSnapshot } from "../src/formatting.js";
+import type { CompactLiveSnapshot, CricketSubscription, NormalizedMatch } from "../src/models.js";
+import { sameChatConversation } from "../src/utils.js";
 
 function liveSnapshot(partial: Partial<CompactLiveSnapshot>): CompactLiveSnapshot {
   return {
@@ -78,15 +80,69 @@ describe("inferDeliveryUpdate", () => {
       liveScore: "MI 126/3 (15.3)",
       totalRuns: 126,
       balls: 93,
-      oversText: "15.3"
+      oversText: "15.3",
+      latestCommentary: "Jadeja to Rohit, no run, punched to cover"
     });
 
     const update = inferDeliveryUpdate(previous, current);
 
     expect(update).not.toBeNull();
-    expect(update?.ballLabel).toBe("15.1-15.3");
+    expect(update?.ballLabel).toBe("15.3");
     expect(update?.ballSpan).toBe(3);
-    expect(update?.commentary).toContain("Snapshot jump");
+    expect(update?.shortResult).toBe("Dot ball");
+    expect(update?.commentary).toContain("no run");
+  });
+});
+
+describe("formatting", () => {
+  it("does not append commentary in balls mode", () => {
+    const update = inferDeliveryUpdate(
+      liveSnapshot({}),
+      liveSnapshot({
+        liveScore: "MI 132/3 (15.4)",
+        totalRuns: 132,
+        balls: 94,
+        oversText: "15.4",
+        latestCommentary: "Jadeja to Rohit, FOUR, drilled past cover",
+        batsmen: [
+          { name: "Rohit Sharma", runs: 49, balls: 32 },
+          { name: "Suryakumar Yadav", runs: 12, balls: 8 }
+        ]
+      })
+    );
+
+    const subscription: CricketSubscription = {
+      id: "telegram|123|1",
+      matchId: "1",
+      matchLabel: "Mumbai Indians vs Chennai Super Kings",
+      mode: "balls",
+      createdAtMs: 1,
+      updatedAtMs: 1,
+      status: "live",
+      target: {
+        channel: "telegram",
+        to: "123",
+        key: "telegram|123||"
+      }
+    };
+
+    const text = formatDeliveryMessage(subscription, update!);
+
+    expect(text).toContain("15.4 | FOUR");
+    expect(text).not.toContain("drilled past cover");
+  });
+
+  it("keeps one-shot score snapshots free of commentary text", () => {
+    const text = formatScoreSnapshot(
+      "Mumbai Indians vs Chennai Super Kings",
+      liveSnapshot({
+        latestCommentary: "Jadeja to Rohit, FOUR, drilled past cover"
+      }),
+      "ipl"
+    );
+
+    expect(text).not.toContain("Latest commentary");
+    expect(text).not.toContain("drilled past cover");
   });
 });
 
@@ -107,5 +163,45 @@ describe("matchesQueryFilter", () => {
     expect(matchesQueryFilter(match, "indian premier league")).toBe(true);
     expect(matchesQueryFilter(match, "mumbai")).toBe(true);
     expect(matchesQueryFilter(match, "royal challengers")).toBe(false);
+  });
+});
+
+describe("sameChatConversation", () => {
+  it("matches the same chat even when the current command has no thread id", () => {
+    expect(
+      sameChatConversation(
+        {
+          channel: "telegram",
+          to: "5362414540",
+          accountId: "default",
+          threadId: "42"
+        },
+        {
+          channel: "telegram",
+          to: "5362414540",
+          accountId: "default",
+          threadId: undefined
+        }
+      )
+    ).toBe(true);
+  });
+
+  it("does not cross channel or recipient boundaries", () => {
+    expect(
+      sameChatConversation(
+        {
+          channel: "telegram",
+          to: "5362414540",
+          accountId: "default",
+          threadId: undefined
+        },
+        {
+          channel: "whatsapp",
+          to: "5362414540",
+          accountId: "default",
+          threadId: undefined
+        }
+      )
+    ).toBe(false);
   });
 });

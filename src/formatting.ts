@@ -109,11 +109,6 @@ export function formatScoreSnapshot(matchLabel: string, snapshot: CompactLiveSna
     lines.push(snapshot.update);
   }
 
-  if (snapshot.latestCommentary) {
-    lines.push("");
-    lines.push(`Latest commentary: ${snapshot.latestCommentary}`);
-  }
-
   lines.push("");
   lines.push(`Subscribe for automatic updates: /${commandRoot} subscribe <number|matchId> balls`);
   lines.push(`With commentary: /${commandRoot} subscribe <number|matchId> commentary`);
@@ -143,7 +138,7 @@ export function formatDeliveryMessage(subscription: CricketSubscription, update:
     lines.push(update.current.update);
   }
 
-  if (subscription.mode === "commentary") {
+  if (subscription.mode === "commentary" && update.commentary) {
     lines.push("");
     lines.push(update.commentary);
   }

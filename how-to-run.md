@@ -1,4 +1,3 @@
-
 Do this in order:
 
 1. Stop any old gateway process:
@@ -41,10 +40,25 @@ or
 
 `/ipl score` is one-shot.
 `/ipl subscribe` keeps sending updates automatically as the score changes.
+`balls` sends only score lines.
+`commentary` adds the latest ball commentary when available.
+
+If you want WhatsApp too, link that channel first:
+
+```powershell
+openclaw channels login --channel whatsapp
+```
+
+Then send the same commands in the WhatsApp chat where OpenClaw is connected:
+
+```text
+/ipl matches
+/ipl score 1
+/ipl subscribe 1 balls
+```
 
 Important:
 - Run only one gateway at a time.
 - Keep the terminal with `openclaw gateway run` open while testing.
 - If `/ipl matches` still does nothing, check whether the log shows Telegram started or whether Gemini hit rate limits again.
-
-If you want, I can give you the exact “good startup” vs “bad startup” log lines to compare against.
+- The cricket commands themselves bypass the LLM, so running out of Gemini free tokens should not stop `/ipl` and `/cricket` commands from working.

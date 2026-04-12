@@ -133,6 +133,11 @@ export class CricketStateStore {
     return this.cleanup(state);
   }
 
+  async hasSubscription(subscriptionId: string): Promise<boolean> {
+    const state = await this.read();
+    return state.subscriptions.some((item) => item.id === subscriptionId);
+  }
+
   async mutate<T>(mutator: (state: PersistedState) => Promise<T> | T): Promise<T> {
     const operation = this.writeQueue.then(async () => {
       const loaded = await this.loadState();
