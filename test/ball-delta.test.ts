@@ -84,9 +84,9 @@ describe("inferDeliveryUpdate", () => {
     const update = inferDeliveryUpdate(previous, current);
 
     expect(update).not.toBeNull();
-    expect(update?.ballLabel).toBe("15.1-15.3");
+    expect(update?.ballLabel).toBe("15.3");
     expect(update?.ballSpan).toBe(3);
-    expect(update?.commentary).toContain("Snapshot jump");
+    expect(update?.shortResult).toBe("SIX");
   });
 });
 

@@ -1,11 +1,7 @@
-import type { CompactLiveSnapshot, DeliveryUpdate } from "./models.js";
-import { ballRangeLabel } from "./utils.js";
+import type { BatterState, BowlerState, CompactLiveSnapshot, DeliveryUpdate } from "./models.js";
+import { ballsToLabel } from "./utils.js";
 
-function describeRuns(runsDelta: number, ballSpan: number): string {
-  if (ballSpan > 1) {
-    return `+${runsDelta} runs`;
-  }
-
+function describeRuns(runsDelta: number): string {
   switch (runsDelta) {
     case 0:
       return "Dot ball";
@@ -54,17 +50,12 @@ function detectFacingBatter(previous: CompactLiveSnapshot | undefined, current: 
 }
 
 function buildCommentary(previous: CompactLiveSnapshot | undefined, current: CompactLiveSnapshot, runsDelta: number, wicketDelta: number, ballSpan: number): string {
-  if (ballSpan === 1 && current.latestCommentary) {
+  if (current.latestCommentary) {
     return current.latestCommentary;
   }
 
   const facingBatter = detectFacingBatter(previous, current);
   const dismissedBatter = wicketDelta > 0 ? detectDismissedBatter(previous, current) : undefined;
-
-  if (ballSpan > 1) {
-    const wicketText = wicketDelta > 0 ? ` and ${wicketDelta} wicket${wicketDelta === 1 ? "" : "s"}` : "";
-    return `Snapshot jump: ${runsDelta} run${runsDelta === 1 ? "" : "s"}${wicketText} across ${ballSpan} balls.`;
-  }
 
   if (wicketDelta > 0) {
     const batterText = dismissedBatter ? ` ${dismissedBatter} departs.` : " A wicket falls.";
@@ -88,6 +79,35 @@ function buildCommentary(previous: CompactLiveSnapshot | undefined, current: Com
     default:
       return `${runsDelta} runs added on the ball.`;
   }
+}
+
+function detectMilestones(previous: CompactLiveSnapshot | undefined, current: CompactLiveSnapshot): string[] {
+  const milestones: string[] = [];
+
+  for (const batter of current.batsmen) {
+    const runs = batter.runs ?? 0;
+    const balls = batter.balls ?? 0;
+    const prevBatter = previous?.batsmen.find((b) => b.name.toLowerCase() === batter.name.toLowerCase());
+    const prevRuns = prevBatter?.runs ?? 0;
+
+    if (runs >= 100 && prevRuns < 100) {
+      milestones.push(`CENTURY! ${batter.name} reaches 100 (${runs} off ${balls} balls)`);
+    } else if (runs >= 50 && prevRuns < 50) {
+      milestones.push(`FIFTY! ${batter.name} reaches 50 (${runs} off ${balls} balls)`);
+    }
+  }
+
+  for (const bowler of current.bowlers) {
+    const wickets = bowler.wickets ?? 0;
+    const prevBowler = previous?.bowlers.find((b) => b.name.toLowerCase() === bowler.name.toLowerCase());
+    const prevWickets = prevBowler?.wickets ?? 0;
+
+    if (wickets >= 5 && prevWickets < 5) {
+      milestones.push(`5-WICKET HAUL! ${bowler.name} (${wickets}/${bowler.runs ?? 0})`);
+    }
+  }
+
+  return milestones;
 }
 
 export function inferDeliveryUpdate(previous: CompactLiveSnapshot | undefined, current: CompactLiveSnapshot): DeliveryUpdate | null {
@@ -115,10 +135,9 @@ export function inferDeliveryUpdate(previous: CompactLiveSnapshot | undefined, c
     }
 
     if (currentBalls < previous.balls) {
-      fromBall = 1;
-      ballSpan = currentBalls;
-      runsDelta = currentRuns;
-      wicketDelta = currentWickets;
+      // Innings changed — don't produce a mega-update. Return null so the
+      // service stores the current snapshot as the new baseline instead.
+      return null;
     } else {
       fromBall = previous.balls + 1;
       ballSpan = Math.max(1, currentBalls - previous.balls);
@@ -128,12 +147,14 @@ export function inferDeliveryUpdate(previous: CompactLiveSnapshot | undefined, c
   }
 
   const toBall = Math.max(fromBall, currentBalls);
-  const shortResult = wicketDelta > 0 ? `${describeRuns(runsDelta, ballSpan)}${runsDelta > 0 ? ", " : ""}WICKET` : describeRuns(runsDelta, ballSpan);
+  const shortResult = wicketDelta > 0 ? `${describeRuns(runsDelta)}${runsDelta > 0 ? ", " : ""}WICKET` : describeRuns(runsDelta);
   const commentary = buildCommentary(previous, current, runsDelta, wicketDelta, ballSpan);
+  const milestones = detectMilestones(previous, current);
+  const isOverEnd = currentBalls > 0 && currentBalls % 6 === 0;
 
   return {
     key: `${current.teamLabel ?? "team"}|${currentRuns}|${currentWickets}|${currentBalls}|${current.batsmen.map((item) => `${item.name}:${item.runs ?? 0}:${item.balls ?? 0}`).join("|")}`,
-    ballLabel: ballRangeLabel(fromBall, toBall),
+    ballLabel: ballsToLabel(toBall),
     ballSpan,
     runsDelta,
     wicketDelta,
@@ -141,6 +162,8 @@ export function inferDeliveryUpdate(previous: CompactLiveSnapshot | undefined, c
     commentary,
     facingBatter: detectFacingBatter(previous, current),
     dismissedBatter: wicketDelta > 0 ? detectDismissedBatter(previous, current) : undefined,
+    milestones,
+    isOverEnd,
     current,
     previous
   };

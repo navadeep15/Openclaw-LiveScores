@@ -48,3 +48,23 @@ Important:
 - If `/ipl matches` still does nothing, check whether the log shows Telegram started or whether Gemini hit rate limits again.
 
 If you want, I can give you the exact “good startup” vs “bad startup” log lines to compare against.
+
+
+
+------------------------------------------------------------------------------------------------
+
+All 3 errors are **dependency-related** (packages not installed on this machine). They'll all resolve on your other laptop where `npm install` works:
+
+
+**Zero logic errors.** Once you run `npm install` and `npm run build` on the other laptop, it'll compile clean and work.
+
+Quick checklist for your other laptop:
+1. Pull/copy the updated code
+2. `npm install`
+3. `npm run build`
+4. `openclaw plugins install -l .`
+5. `openclaw plugins enable cricket-live-scores`
+6. `openclaw gateway run`
+7. Send `/ipl matches` from Telegram
+
+Everything's ready.

@@ -29,6 +29,7 @@ export interface ResolvedPluginConfig {
   listLimit: number;
   maxSubscriptionsPerChat: number;
   lookupCacheTtlMs: number;
+  staleSubscriptionMs: number;
 }
 
 export function resolvePluginConfig(raw: unknown): ResolvedPluginConfig {
@@ -42,6 +43,7 @@ export function resolvePluginConfig(raw: unknown): ResolvedPluginConfig {
     defaultQuery: asString(source.defaultQuery) ?? "ipl",
     listLimit: clamp(asInteger(source.listLimit), 8, 3, 30),
     maxSubscriptionsPerChat: clamp(asInteger(source.maxSubscriptionsPerChat), 5, 1, 20),
-    lookupCacheTtlMs: clamp(asInteger(source.lookupCacheTtlMs), 30 * 60 * 1000, 60_000, 30 * 60 * 1000)
+    lookupCacheTtlMs: clamp(asInteger(source.lookupCacheTtlMs), 30 * 60 * 1000, 60_000, 30 * 60 * 1000),
+    staleSubscriptionMs: clamp(asInteger(source.staleSubscriptionMs), 48 * 60 * 60 * 1000, 6 * 60 * 60 * 1000, 7 * 24 * 60 * 60 * 1000)
   };
 }

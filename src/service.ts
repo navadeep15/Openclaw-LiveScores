@@ -1,8 +1,8 @@
 import { inferDeliveryUpdate } from "./ball-delta.js";
 import { resolvePluginConfig } from "./config.js";
-import { formatCompletionMessage, formatDeliveryMessage } from "./formatting.js";
+import { formatCompletionMessage, formatDeliveryMessage, formatInningsChange, formatMatchStarted, formatStaleRemoval } from "./formatting.js";
 import { toCompactLiveSnapshot } from "./live-state.js";
-import type { CompactLiveSnapshot, CricketSubscription, MatchStatus } from "./models.js";
+import type { CompactLiveSnapshot, CricketSubscription, MatchStatus, TargetConfig } from "./models.js";
 import type { PluginApiLike, ServiceDefinitionLike } from "./openclaw.js";
 import type { CricbuzzProvider } from "./cricbuzz-provider.js";
 import type { CricketStateStore } from "./state.js";
@@ -14,6 +14,35 @@ function isDue(subscription: CricketSubscription, now: number, livePollMs: numbe
 
 function nextStatusFromSnapshot(snapshot: CompactLiveSnapshot): MatchStatus {
   return snapshot.status;
+}
+
+function isInQuietHours(config: TargetConfig | undefined): boolean {
+  if (!config?.quietStart || !config?.quietEnd) {
+    return false;
+  }
+
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const [startH, startM] = config.quietStart.split(":").map(Number);
+  const [endH, endM] = config.quietEnd.split(":").map(Number);
+  const startMinutes = (startH ?? 0) * 60 + (startM ?? 0);
+  const endMinutes = (endH ?? 0) * 60 + (endM ?? 0);
+
+  if (startMinutes <= endMinutes) {
+    return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+  }
+
+  // Spans midnight (e.g., 23:00-07:00)
+  return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+}
+
+function isInningsChange(previous: CompactLiveSnapshot | undefined, current: CompactLiveSnapshot): boolean {
+  if (!previous || previous.balls == null || current.balls == null) {
+    return false;
+  }
+
+  return current.balls < previous.balls || (current.teamLabel != null && previous.teamLabel != null && current.teamLabel !== previous.teamLabel);
 }
 
 async function sendText(api: PluginApiLike, subscription: CricketSubscription, text: string): Promise<void> {
@@ -75,6 +104,8 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
           continue;
         }
 
+        const targetConfig = state.targetConfigs[subscription.target.key];
+
         const nextStatus = nextStatusFromSnapshot(snapshot);
         const basePatch: CricketSubscription = {
           ...subscription,
@@ -84,8 +115,36 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
           status: nextStatus
         };
 
+        // --- Stale subscription cleanup ---
+        if (subscription.status === "upcoming" && snapshot.status === "upcoming" && now - subscription.createdAtMs > config.staleSubscriptionMs) {
+          try {
+            await sendText(api, subscription, formatStaleRemoval(basePatch));
+          } catch (error) {
+            api.logger.warn?.(`cricket-live-scores: failed to send stale removal for ${subscription.matchId}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+          patches.set(subscription.id, null);
+          continue;
+        }
+
+        // --- Match start alert ---
+        if (subscription.status !== "live" && snapshot.status === "live" && !isInQuietHours(targetConfig)) {
+          try {
+            const freshState = await store.read();
+            if (freshState.subscriptions.some((s) => s.id === subscription.id)) {
+              await sendText(api, subscription, formatMatchStarted(basePatch, snapshot));
+            }
+          } catch (error) {
+            api.logger.warn?.(`cricket-live-scores: failed to send match start alert for ${subscription.matchId}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+
         if (snapshot.status === "completed") {
           try {
+            const freshState = await store.read();
+            if (!freshState.subscriptions.some((s) => s.id === subscription.id)) {
+              continue;
+            }
+            // Always send completion messages even during quiet hours
             await sendText(api, subscription, formatCompletionMessage(basePatch, snapshot));
             patches.set(subscription.id, null);
           } catch (error) {
@@ -97,13 +156,36 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
 
         const update = inferDeliveryUpdate(subscription.lastSnapshot, snapshot);
         if (!update) {
+          // --- Innings change notification ---
+          if (isInningsChange(subscription.lastSnapshot, snapshot) && !isInQuietHours(targetConfig)) {
+            try {
+              const freshState = await store.read();
+              if (freshState.subscriptions.some((s) => s.id === subscription.id) && subscription.lastSnapshot) {
+                await sendText(api, subscription, formatInningsChange(basePatch, subscription.lastSnapshot, snapshot));
+              }
+            } catch (error) {
+              api.logger.warn?.(`cricket-live-scores: failed to send innings change for ${subscription.matchId}: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          }
+
           basePatch.lastSnapshot = snapshot.status === "live" ? snapshot : subscription.lastSnapshot;
           patches.set(subscription.id, basePatch);
           continue;
         }
 
+        // --- Quiet hours: still update state but skip sending ---
+        if (isInQuietHours(targetConfig)) {
+          basePatch.lastSnapshot = snapshot;
+          patches.set(subscription.id, basePatch);
+          continue;
+        }
+
         try {
-          await sendText(api, subscription, formatDeliveryMessage(subscription, update));
+          const freshState = await store.read();
+          if (!freshState.subscriptions.some((s) => s.id === subscription.id)) {
+            continue;
+          }
+          await sendText(api, subscription, formatDeliveryMessage(basePatch, update));
           basePatch.lastSnapshot = snapshot;
           patches.set(subscription.id, basePatch);
         } catch (error) {

@@ -29,6 +29,9 @@ export function formatHelp(commandRoot: "cricket" | "ipl"): string {
     `${prefix} subscriptions`,
     `${prefix} unsubscribe <number|matchId|all>`,
     `${prefix} mode <number|matchId> balls|commentary`,
+    `${prefix} summary <number|matchId>`,
+    `${prefix} quiet HH:MM-HH:MM`,
+    `${prefix} quiet off`,
     `${prefix} help`
   ].join("\n");
 }
@@ -143,9 +146,26 @@ export function formatDeliveryMessage(subscription: CricketSubscription, update:
     lines.push(update.current.update);
   }
 
-  if (subscription.mode === "commentary") {
+  if (subscription.mode === "commentary" && update.commentary) {
     lines.push("");
     lines.push(update.commentary);
+  }
+
+  if (update.milestones.length > 0) {
+    lines.push("");
+    for (const milestone of update.milestones) {
+      lines.push(milestone);
+    }
+  }
+
+  if (update.isOverEnd && update.current.oversText) {
+    const overNumber = Math.floor((update.current.balls ?? 0) / 6);
+    const rr = update.current.totalRuns != null && overNumber > 0
+      ? (update.current.totalRuns / overNumber).toFixed(2)
+      : undefined;
+    const rrText = rr ? ` | RR: ${rr}` : "";
+    lines.push("");
+    lines.push(`End of over ${overNumber} | ${update.current.liveScore}${rrText}`);
   }
 
   return lines.join("\n");
@@ -159,4 +179,93 @@ export function formatCompletionMessage(subscription: CricketSubscription, snaps
     "",
     "This subscription has been stopped automatically."
   ].join("\n");
+}
+
+export function formatInningsChange(subscription: CricketSubscription, previousSnapshot: CompactLiveSnapshot, currentSnapshot: CompactLiveSnapshot): string {
+  const lines = [subscription.matchLabel, ""];
+  lines.push(`Innings complete: ${previousSnapshot.liveScore || "Score unavailable"}`);
+  if (previousSnapshot.update) {
+    lines.push(previousSnapshot.update);
+  }
+  lines.push("");
+  if (currentSnapshot.liveScore) {
+    lines.push(`New innings: ${currentSnapshot.liveScore}`);
+  }
+  if (currentSnapshot.update) {
+    lines.push(currentSnapshot.update);
+  }
+  return lines.join("\n");
+}
+
+export function formatMatchStarted(subscription: CricketSubscription, snapshot: CompactLiveSnapshot): string {
+  const lines = [`${subscription.matchLabel} is now LIVE!`];
+  if (snapshot.liveScore) {
+    lines.push(snapshot.liveScore);
+  }
+  if (snapshot.update) {
+    lines.push(snapshot.update);
+  }
+  lines.push("");
+  lines.push("Ball-by-ball updates will follow.");
+  return lines.join("\n");
+}
+
+export function formatStaleRemoval(subscription: CricketSubscription): string {
+  return [
+    `${subscription.matchLabel} has been waiting too long without going live.`,
+    "This subscription has been removed automatically.",
+    "You can re-subscribe if the match gets rescheduled."
+  ].join("\n");
+}
+
+export function formatMatchSummary(matchLabel: string, snapshot: CompactLiveSnapshot): string {
+  const lines = [matchLabel];
+
+  if (snapshot.liveScore) {
+    lines.push(snapshot.liveScore);
+  }
+
+  if (snapshot.update) {
+    lines.push(snapshot.update);
+  }
+
+  if (snapshot.runRate) {
+    lines.push(`Run rate: ${snapshot.runRate}`);
+  }
+
+  if (snapshot.batsmen.length > 0) {
+    lines.push("");
+    lines.push("Batting:");
+    for (const batter of snapshot.batsmen) {
+      const r = batter.runs ?? 0;
+      const b = batter.balls ?? 0;
+      lines.push(`  ${batter.name}: ${r} (${b})`);
+    }
+  }
+
+  if (snapshot.bowlers.length > 0) {
+    lines.push("");
+    lines.push("Bowling:");
+    for (const bowler of snapshot.bowlers) {
+      const o = bowler.oversText ?? "0";
+      const r = bowler.runs ?? 0;
+      const w = bowler.wickets ?? 0;
+      lines.push(`  ${bowler.name}: ${w}/${r} (${o})`);
+    }
+  }
+
+  if (snapshot.latestCommentary) {
+    lines.push("");
+    lines.push(`Latest: ${snapshot.latestCommentary}`);
+  }
+
+  return lines.join("\n");
+}
+
+export function formatQuietHoursSet(start: string, end: string): string {
+  return `Quiet hours set: ${start} to ${end}.\nNo score notifications will be sent during this window (server local time).`;
+}
+
+export function formatQuietHoursOff(): string {
+  return "Quiet hours disabled. All notifications will be delivered.";
 }

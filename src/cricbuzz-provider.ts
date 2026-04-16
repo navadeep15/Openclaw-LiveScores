@@ -151,6 +151,10 @@ export class CricbuzzProvider {
   }
 
   async fetchScore(matchId: string): Promise<RawLiveScoreSnapshot> {
+    if (!/^\d+$/.test(matchId)) {
+      throw new Error(`Invalid matchId: "${matchId}". Must be numeric.`);
+    }
+
     const html = await this.fetchHtml(`/live-cricket-scores/${matchId}`);
     const $ = load(html);
     const main = $("main").first();
