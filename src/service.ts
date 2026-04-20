@@ -81,6 +81,8 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
         return;
       }
 
+      console.log(`[cricket-debug] tick: ${dueSubscriptions.length} due, ${state.subscriptions.length} total`);
+
       const snapshots = new Map<string, CompactLiveSnapshot>();
 
       for (const subscription of dueSubscriptions) {
@@ -91,6 +93,8 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
         try {
           const raw = await provider.fetchScore(subscription.matchId);
           snapshots.set(subscription.matchId, toCompactLiveSnapshot(raw));
+          const dbgSnap = snapshots.get(subscription.matchId)!;
+          console.log(`[cricket-debug] snapshot ${subscription.matchId}: score="${dbgSnap.liveScore}" runs=${dbgSnap.totalRuns} wkts=${dbgSnap.wickets} balls=${dbgSnap.balls} status=${dbgSnap.status}`);
         } catch (error) {
           api.logger.warn?.(`cricket-live-scores: failed to refresh match ${subscription.matchId}: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -155,6 +159,7 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
         }
 
         const update = inferDeliveryUpdate(subscription.lastSnapshot, snapshot);
+        console.log(`[cricket-debug] delta ${subscription.matchId}: hasUpdate=${!!update} prevBalls=${subscription.lastSnapshot?.balls} curBalls=${snapshot.balls} prevRuns=${subscription.lastSnapshot?.totalRuns} curRuns=${snapshot.totalRuns}`);
         if (!update) {
           // --- Innings change notification ---
           if (isInningsChange(subscription.lastSnapshot, snapshot) && !isInQuietHours(targetConfig)) {

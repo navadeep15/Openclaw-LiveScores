@@ -81,7 +81,7 @@ function parseLiveScoreLine(liveScore: string): {
     return {};
   }
 
-  const scoreMatch = value.match(/^(.*?)(\d+)(?:\/(\d+))?\s*\((\d+(?:\.\d+)?)\)\s*$/);
+  const scoreMatch = value.match(/^(.*?)(\d+)(?:[\/-](\d+))?\s*\((\d+(?:\.\d+)?)\)\s*$/);
   if (!scoreMatch) {
     return {};
   }
