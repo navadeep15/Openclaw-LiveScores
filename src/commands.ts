@@ -3,7 +3,7 @@ import type { CommandContextLike, CommandResponseLike, PluginApiLike } from "./o
 import type { CricbuzzProvider } from "./cricbuzz-provider.js";
 import type { CricketStateStore } from "./state.js";
 import { resolvePluginConfig } from "./config.js";
-import { formatHelp, formatMatches, formatModeUpdated, formatScoreSnapshot, formatSubscribeAck, formatSubscriptionList, formatUnsubscribeResult } from "./formatting.js";
+import { formatHelp, formatMatches, formatMatchSummary, formatModeUpdated, formatQuietHoursOff, formatQuietHoursSet, formatScoreSnapshot, formatSubscribeAck, formatSubscriptionList, formatUnsubscribeResult } from "./formatting.js";
 import { toCompactLiveSnapshot } from "./live-state.js";
 import { cleanText, normalizeSelectionToken, parseCommandTokens, resolveChatTarget, sameChatConversation } from "./utils.js";
 
@@ -301,6 +301,61 @@ export function createCommandHandler(api: PluginApiLike, store: CricketStateStor
       return {
         text: formatModeUpdated(existing.matchLabel, mode)
       };
+    }
+
+    if (action === "summary" || action === "detail" || action === "info") {
+      const selection = normalizeSelectionToken(tokens[1]);
+
+      if (!selection) {
+        return {
+          text: `Usage:\n/${preset} summary <number|matchId>`
+        };
+      }
+
+      const state = await store.read();
+      const lookup = state.lookups[chatTarget.key];
+      const selected = lookup ? resolveLookupSelection(selection, lookup.matches) : null;
+
+      if (!selected && !lookup && isAmbiguousListSelection(selection, api)) {
+        return {
+          text: formatMissingLookupSelection(preset, selection, "score")
+        };
+      }
+
+      const score = await provider.fetchScore(selected?.id ?? selection);
+      const snapshot = toCompactLiveSnapshot(score);
+
+      return {
+        text: formatMatchSummary(selected?.title || snapshot.title || `Match ${selection}`, snapshot)
+      };
+    }
+
+    if (action === "quiet" || action === "dnd" || action === "silent") {
+      const arg = cleanText(tokens.slice(1).join(" ")).toLowerCase();
+
+      if (arg === "off" || arg === "disable" || arg === "none") {
+        await store.mutate((draft) => {
+          delete draft.targetConfigs[chatTarget.key];
+        });
+
+        return { text: formatQuietHoursOff() };
+      }
+
+      const rangeMatch = arg.match(/^(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})$/);
+      if (!rangeMatch) {
+        return {
+          text: `Usage:\n/${preset} quiet HH:MM-HH:MM\n/${preset} quiet off\n\nExample: /${preset} quiet 23:00-07:00`
+        };
+      }
+
+      const quietStart = rangeMatch[1]!;
+      const quietEnd = rangeMatch[2]!;
+
+      await store.mutate((draft) => {
+        draft.targetConfigs[chatTarget.key] = { quietStart, quietEnd };
+      });
+
+      return { text: formatQuietHoursSet(quietStart, quietEnd) };
     }
 
     return { text: formatHelp(preset) };

@@ -99,3 +99,30 @@ Add this under `plugins.entries.cricket-live-scores.config` in your OpenClaw con
 - Numbered selections such as `1` depend on a recent `/ipl matches` or `/cricket matches` result. If that list is stale, run the match list command again or use the full matchId.
 - These slash commands are custom plugin commands, so they bypass the LLM. Gemini or Groq quota matters for general assistant chat, but not for the core `/ipl` or `/cricket` command handling in this plugin.
 - Always-on Telegram or WhatsApp delivery needs a continuously running OpenClaw gateway. That is a deployment concern outside the plugin code itself.
+
+
+List of all available commands:
+
+
+| Command | Example | Description |
+|---------|---------|-------------|
+| `/ipl matches` | `/ipl matches` | List live & upcoming IPL matches |
+| `/ipl matches [query]` | `/ipl matches mumbai` | Search matches by team or keyword |
+| `/ipl score <n>` | `/ipl score 1` | One-shot current score for match #n |
+| `/ipl subscribe <n> balls` | `/ipl subscribe 1 balls` | Subscribe to ball-by-ball updates |
+| `/ipl subscribe <n> commentary` | `/ipl subscribe 1 commentary` | Subscribe with Cricbuzz commentary text |
+| `/ipl subscriptions` | `/ipl subscriptions` | List your active subscriptions in this chat |
+| `/ipl unsubscribe <n>` | `/ipl unsubscribe 1` | Unsubscribe from match #n |
+| `/ipl unsubscribe all` | `/ipl unsubscribe all` | Remove all subscriptions in this chat |
+| `/ipl mode <n> balls` | `/ipl mode 1 balls` | Switch existing subscription to scores only |
+| `/ipl mode <n> commentary` | `/ipl mode 1 commentary` | Switch existing subscription to include commentary |
+| `/ipl summary <n>` | `/ipl summary 1` | Detailed scorecard: batting, bowling, run rate, latest ball |
+| `/ipl quiet HH:MM-HH:MM` | `/ipl quiet 23:00-07:00` | Suppress notifications during this time window |
+| `/ipl quiet off` | `/ipl quiet off` | Disable quiet hours |
+| `/ipl help` | `/ipl help` | Show command reference |
+| `/cricket matches [query]` | `/cricket matches england` | Same as `/ipl` but for all cricket worldwide |
+
+**Notes:**
+- `<n>` = the number from the most recent `/ipl matches` list, or a raw matchId
+- `/cricket` mirrors every `/ipl` command — just replace the prefix
+- Subscriptions are per-chat — each WhatsApp/Telegram conversation has its own independent subscriptions

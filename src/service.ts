@@ -1,8 +1,8 @@
 import { inferDeliveryUpdate } from "./ball-delta.js";
 import { resolvePluginConfig } from "./config.js";
-import { formatCompletionMessage, formatDeliveryMessage } from "./formatting.js";
+import { formatCompletionMessage, formatDeliveryMessage, formatInningsChange, formatMatchStarted, formatStaleRemoval } from "./formatting.js";
 import { toCompactLiveSnapshot } from "./live-state.js";
-import type { CompactLiveSnapshot, CricketSubscription, MatchStatus } from "./models.js";
+import type { CompactLiveSnapshot, CricketSubscription, MatchStatus, TargetConfig } from "./models.js";
 import type { PluginApiLike, ServiceDefinitionLike } from "./openclaw.js";
 import type { CricbuzzProvider } from "./cricbuzz-provider.js";
 import type { CricketStateStore } from "./state.js";
@@ -62,6 +62,8 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
         return;
       }
 
+      console.log(`[cricket-debug] tick: ${dueSubscriptions.length} due, ${state.subscriptions.length} total`);
+
       const snapshots = new Map<string, CompactLiveSnapshot>();
 
       for (const subscription of dueSubscriptions) {
@@ -72,6 +74,8 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
         try {
           const raw = await provider.fetchScore(subscription.matchId);
           snapshots.set(subscription.matchId, toCompactLiveSnapshot(raw));
+          const dbgSnap = snapshots.get(subscription.matchId)!;
+          console.log(`[cricket-debug] snapshot ${subscription.matchId}: score="${dbgSnap.liveScore}" runs=${dbgSnap.totalRuns} wkts=${dbgSnap.wickets} balls=${dbgSnap.balls} status=${dbgSnap.status}`);
         } catch (error) {
           api.logger.warn?.(`cricket-live-scores: failed to refresh match ${subscription.matchId}: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -104,6 +108,29 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
           status: nextStatus
         };
 
+        // --- Stale subscription cleanup ---
+        if (subscription.status === "upcoming" && snapshot.status === "upcoming" && now - subscription.createdAtMs > config.staleSubscriptionMs) {
+          try {
+            await sendText(api, subscription, formatStaleRemoval(basePatch));
+          } catch (error) {
+            api.logger.warn?.(`cricket-live-scores: failed to send stale removal for ${subscription.matchId}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+          patches.set(subscription.id, null);
+          continue;
+        }
+
+        // --- Match start alert ---
+        if (subscription.status !== "live" && snapshot.status === "live" && !isInQuietHours(targetConfig)) {
+          try {
+            const freshState = await store.read();
+            if (freshState.subscriptions.some((s) => s.id === subscription.id)) {
+              await sendText(api, subscription, formatMatchStarted(basePatch, snapshot));
+            }
+          } catch (error) {
+            api.logger.warn?.(`cricket-live-scores: failed to send match start alert for ${subscription.matchId}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+
         if (snapshot.status === "completed") {
           if (!(await store.hasSubscription(subscription.id))) {
             patches.set(subscription.id, null);
@@ -111,6 +138,11 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
           }
 
           try {
+            const freshState = await store.read();
+            if (!freshState.subscriptions.some((s) => s.id === subscription.id)) {
+              continue;
+            }
+            // Always send completion messages even during quiet hours
             await sendText(api, subscription, formatCompletionMessage(basePatch, snapshot));
             patches.set(subscription.id, null);
           } catch (error) {
@@ -121,8 +153,28 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
         }
 
         const update = inferDeliveryUpdate(subscription.lastSnapshot, snapshot);
+        console.log(`[cricket-debug] delta ${subscription.matchId}: hasUpdate=${!!update} prevBalls=${subscription.lastSnapshot?.balls} curBalls=${snapshot.balls} prevRuns=${subscription.lastSnapshot?.totalRuns} curRuns=${snapshot.totalRuns}`);
         if (!update) {
+          // --- Innings change notification ---
+          if (isInningsChange(subscription.lastSnapshot, snapshot) && !isInQuietHours(targetConfig)) {
+            try {
+              const freshState = await store.read();
+              if (freshState.subscriptions.some((s) => s.id === subscription.id) && subscription.lastSnapshot) {
+                await sendText(api, subscription, formatInningsChange(basePatch, subscription.lastSnapshot, snapshot));
+              }
+            } catch (error) {
+              api.logger.warn?.(`cricket-live-scores: failed to send innings change for ${subscription.matchId}: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          }
+
           basePatch.lastSnapshot = snapshot.status === "live" ? snapshot : subscription.lastSnapshot;
+          patches.set(subscription.id, basePatch);
+          continue;
+        }
+
+        // --- Quiet hours: still update state but skip sending ---
+        if (isInQuietHours(targetConfig)) {
+          basePatch.lastSnapshot = snapshot;
           patches.set(subscription.id, basePatch);
           continue;
         }

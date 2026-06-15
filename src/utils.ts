@@ -121,11 +121,6 @@ export function ballsToLabel(totalBalls: number): string {
   return `${over}.${ball}`;
 }
 
-export function ballRangeLabel(fromBall: number, toBall: number): string {
-  const start = ballsToLabel(fromBall);
-  const end = ballsToLabel(toBall);
-  return start === end ? start : `${start}-${end}`;
-}
 
 export function uniqBy<T>(items: T[], keyOf: (item: T) => string): T[] {
   const seen = new Set<string>();

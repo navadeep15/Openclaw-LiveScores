@@ -1,12 +1,30 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import type { CricketSubscription, LookupCacheEntry, PersistedState } from "./models.js";
+import type { CricketSubscription, LookupCacheEntry, PersistedState, TargetConfig } from "./models.js";
 import type { PluginApiLike } from "./openclaw.js";
 import { resolvePluginConfig } from "./config.js";
 import { trimRecord } from "./utils.js";
 
 const STATE_FILE = "cricket-live-scores.state.json";
+
+function normalizeSnapshot(raw: unknown): import("./models.js").CompactLiveSnapshot | undefined {
+  if (typeof raw !== "object" || raw === null) {
+    return undefined;
+  }
+
+  const record = raw as Record<string, unknown>;
+
+  if (typeof record.title !== "string" || typeof record.update !== "string" || typeof record.liveScore !== "string") {
+    return undefined;
+  }
+
+  if (!Array.isArray(record.batsmen) || !Array.isArray(record.bowlers)) {
+    return undefined;
+  }
+
+  return trimRecord(record) as unknown as import("./models.js").CompactLiveSnapshot;
+}
 
 function normalizeSubscription(raw: unknown): CricketSubscription | null {
   if (typeof raw !== "object" || raw === null) {
@@ -47,7 +65,7 @@ function normalizeSubscription(raw: unknown): CricketSubscription | null {
       threadId: typeof target.threadId === "string" || typeof target.threadId === "number" ? target.threadId : undefined,
       key: target.key
     },
-    lastSnapshot: typeof record.lastSnapshot === "object" && record.lastSnapshot !== null ? trimRecord(record.lastSnapshot as Record<string, unknown>) : undefined
+    lastSnapshot: normalizeSnapshot(record.lastSnapshot)
   } as CricketSubscription;
 }
 
@@ -74,11 +92,30 @@ function normalizeLookup(raw: unknown): LookupCacheEntry | null {
   };
 }
 
+function normalizeTargetConfig(raw: unknown): TargetConfig | null {
+  if (typeof raw !== "object" || raw === null) {
+    return null;
+  }
+
+  const record = raw as Record<string, unknown>;
+  const config: TargetConfig = {};
+
+  if (typeof record.quietStart === "string" && /^\d{1,2}:\d{2}$/.test(record.quietStart)) {
+    config.quietStart = record.quietStart;
+  }
+  if (typeof record.quietEnd === "string" && /^\d{1,2}:\d{2}$/.test(record.quietEnd)) {
+    config.quietEnd = record.quietEnd;
+  }
+
+  return config;
+}
+
 function emptyState(): PersistedState {
   return {
     version: 1,
     subscriptions: [],
-    lookups: {}
+    lookups: {},
+    targetConfigs: {}
   };
 }
 
@@ -113,6 +150,7 @@ export class CricketStateStore {
       const content = await fs.readFile(this.resolveStatePath(), "utf8");
       const parsed = JSON.parse(content) as Record<string, unknown>;
       const lookups = typeof parsed.lookups === "object" && parsed.lookups !== null ? (parsed.lookups as Record<string, unknown>) : {};
+      const rawTargetConfigs = typeof parsed.targetConfigs === "object" && parsed.targetConfigs !== null ? (parsed.targetConfigs as Record<string, unknown>) : {};
       const next: PersistedState = {
         version: 1,
         subscriptions: Array.isArray(parsed.subscriptions)
@@ -122,6 +160,11 @@ export class CricketStateStore {
           Object.entries(lookups)
             .map(([key, value]) => [key, normalizeLookup(value)] as const)
             .filter((entry): entry is [string, LookupCacheEntry] => entry[1] !== null)
+        ),
+        targetConfigs: Object.fromEntries(
+          Object.entries(rawTargetConfigs)
+            .map(([key, value]) => [key, normalizeTargetConfig(value)] as const)
+            .filter((entry): entry is [string, TargetConfig] => entry[1] !== null)
         )
       };
 
@@ -136,8 +179,11 @@ export class CricketStateStore {
 
   private async saveState(state: PersistedState): Promise<void> {
     this.cache = trimRecord(state);
-    await fs.mkdir(path.dirname(this.resolveStatePath()), { recursive: true });
-    await fs.writeFile(this.resolveStatePath(), `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    const filePath = this.resolveStatePath();
+    const tmpPath = `${filePath}.tmp`;
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(tmpPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    await fs.rename(tmpPath, filePath);
   }
 
   async read(): Promise<PersistedState> {

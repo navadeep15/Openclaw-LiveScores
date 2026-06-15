@@ -80,6 +80,12 @@ export interface PersistedState {
   version: 1;
   subscriptions: CricketSubscription[];
   lookups: Record<string, LookupCacheEntry>;
+  targetConfigs: Record<string, TargetConfig>;
+}
+
+export interface TargetConfig {
+  quietStart?: string;
+  quietEnd?: string;
 }
 
 export interface DeliveryUpdate {
@@ -92,6 +98,8 @@ export interface DeliveryUpdate {
   commentary?: string;
   facingBatter?: string;
   dismissedBatter?: string;
+  milestones: string[];
+  isOverEnd: boolean;
   current: CompactLiveSnapshot;
   previous?: CompactLiveSnapshot;
 }

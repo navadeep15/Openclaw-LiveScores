@@ -1,11 +1,7 @@
 import type { CompactLiveSnapshot, DeliveryUpdate } from "./models.js";
 import { ballsToLabel, cleanText } from "./utils.js";
 
-function describeRuns(runsDelta: number, ballSpan: number): string {
-  if (ballSpan > 1) {
-    return `+${runsDelta} runs`;
-  }
-
+function describeRuns(runsDelta: number): string {
   switch (runsDelta) {
     case 0:
       return "Dot ball";
@@ -209,10 +205,9 @@ export function inferDeliveryUpdate(previous: CompactLiveSnapshot | undefined, c
     }
 
     if (currentBalls < previous.balls) {
-      fromBall = 1;
-      ballSpan = currentBalls;
-      runsDelta = currentRuns;
-      wicketDelta = currentWickets;
+      // Innings changed — don't produce a mega-update. Return null so the
+      // service stores the current snapshot as the new baseline instead.
+      return null;
     } else {
       fromBall = previous.balls + 1;
       ballSpan = Math.max(1, currentBalls - previous.balls);
@@ -224,6 +219,8 @@ export function inferDeliveryUpdate(previous: CompactLiveSnapshot | undefined, c
   const toBall = Math.max(fromBall, currentBalls);
   const shortResult = resolveShortResult(current, runsDelta, wicketDelta, ballSpan);
   const commentary = buildCommentary(previous, current, runsDelta, wicketDelta, ballSpan);
+  const milestones = detectMilestones(previous, current);
+  const isOverEnd = currentBalls > 0 && currentBalls % 6 === 0;
 
   return {
     key: `${current.teamLabel ?? "team"}|${currentRuns}|${currentWickets}|${currentBalls}|${current.batsmen.map((item) => `${item.name}:${item.runs ?? 0}:${item.balls ?? 0}`).join("|")}`,
@@ -235,6 +232,8 @@ export function inferDeliveryUpdate(previous: CompactLiveSnapshot | undefined, c
     commentary,
     facingBatter: detectFacingBatter(previous, current),
     dismissedBatter: wicketDelta > 0 ? detectDismissedBatter(previous, current) : undefined,
+    milestones,
+    isOverEnd,
     current,
     previous
   };

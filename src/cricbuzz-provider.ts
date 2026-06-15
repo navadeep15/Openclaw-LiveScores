@@ -103,7 +103,7 @@ function parseMatchCard(titleAttribute: string | undefined, primaryText: string,
 }
 
 function normalizeScoreChunk(scoreChunk: string): string {
-  return cleanText(scoreChunk).replace(/(\d|\d\/\d+)\(/, "$1 (");
+  return cleanText(scoreChunk).replace(/(\d+[\/-]\d+)\(/, "$1 (").replace(/(\d)\(/, "$1 (");
 }
 
 function firstDefinedText(values: Array<string | undefined>): string {
@@ -151,6 +151,10 @@ export class CricbuzzProvider {
   }
 
   async fetchScore(matchId: string): Promise<RawLiveScoreSnapshot> {
+    if (!/^\d+$/.test(matchId)) {
+      throw new Error(`Invalid matchId: "${matchId}". Must be numeric.`);
+    }
+
     const html = await this.fetchHtml(`/live-cricket-scores/${matchId}`);
     const $ = load(html);
     const main = $("main").first();
@@ -179,8 +183,8 @@ export class CricbuzzProvider {
       runRate = cleanText((scoreParts.find((part) => /rr:/i.test(part)) ?? "").replace(/^[A-Z\s]*RR:\s*/i, ""));
     }
 
-    if (liveScore && !/\/\d+\s*\(/.test(liveScore)) {
-      const allOutMatch = cleanText(main.text()).match(/(\d+)\/(\d+)\s+in\s+(\d+(?:\.\d+)?)\s+ov\./i);
+    if (liveScore && !/[\/-]\d+\s*\(/.test(liveScore)) {
+      const allOutMatch = cleanText(main.text()).match(/(\d+)[\/-](\d+)\s+in\s+(\d+(?:\.\d+)?)\s+ov\./i);
       const liveScoreMatch = liveScore.match(/^(.*?)(\d+)\s*\((\d+(?:\.\d+)?)\)$/);
 
       if (allOutMatch && liveScoreMatch && allOutMatch[1] === liveScoreMatch[2] && allOutMatch[3] === liveScoreMatch[3]) {

@@ -89,14 +89,19 @@ function parseLiveScoreLine(liveScore: string): {
 
   const teamLabel = cleanText(scoreMatch[1]);
   const totalRuns = Number.parseInt(scoreMatch[2] ?? "", 10);
-  const wickets = scoreMatch[3] ? Number.parseInt(scoreMatch[3], 10) : undefined;
+  let wickets = scoreMatch[3] ? Number.parseInt(scoreMatch[3], 10) : undefined;
   const oversText = cleanText(scoreMatch[4]);
   const balls = oversToBalls(oversText);
+
+  // When wickets are omitted (e.g. "MI 180 (20.0)"), the team is likely all out
+  if (wickets == null || !Number.isFinite(wickets)) {
+    wickets = 10;
+  }
 
   return {
     teamLabel: teamLabel || undefined,
     totalRuns: Number.isFinite(totalRuns) ? totalRuns : undefined,
-    wickets: wickets != null && Number.isFinite(wickets) ? wickets : undefined,
+    wickets,
     oversText: oversText || undefined,
     balls
   };
