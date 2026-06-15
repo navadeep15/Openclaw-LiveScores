@@ -139,6 +139,35 @@ function buildCommentary(previous: CompactLiveSnapshot | undefined, current: Com
   }
 }
 
+function detectMilestones(previous: CompactLiveSnapshot | undefined, current: CompactLiveSnapshot): string[] {
+  const milestones: string[] = [];
+
+  for (const batter of current.batsmen) {
+    const runs = batter.runs ?? 0;
+    const balls = batter.balls ?? 0;
+    const prevBatter = previous?.batsmen.find((item) => item.name.toLowerCase() === batter.name.toLowerCase());
+    const prevRuns = prevBatter?.runs ?? 0;
+
+    if (runs >= 100 && prevRuns < 100) {
+      milestones.push(`CENTURY! ${batter.name} reaches 100 (${runs} off ${balls} balls)`);
+    } else if (runs >= 50 && prevRuns < 50) {
+      milestones.push(`FIFTY! ${batter.name} reaches 50 (${runs} off ${balls} balls)`);
+    }
+  }
+
+  for (const bowler of current.bowlers) {
+    const wickets = bowler.wickets ?? 0;
+    const prevBowler = previous?.bowlers.find((item) => item.name.toLowerCase() === bowler.name.toLowerCase());
+    const prevWickets = prevBowler?.wickets ?? 0;
+
+    if (wickets >= 5 && prevWickets < 5) {
+      milestones.push(`5-WICKET HAUL! ${bowler.name} (${wickets}/${bowler.runs ?? 0})`);
+    }
+  }
+
+  return milestones;
+}
+
 function resolveBallLabel(current: CompactLiveSnapshot, currentBalls: number, fromBall: number, toBall: number): string {
   if (current.oversText) {
     return current.oversText;
@@ -177,7 +206,7 @@ function resolveShortResult(current: CompactLiveSnapshot, runsDelta: number, wic
     return runsDelta > 0 ? `Score update (+${runsDelta})` : "Score update";
   }
 
-  return wicketDelta > 0 ? `${describeRuns(runsDelta, ballSpan)}${runsDelta > 0 ? ", " : ""}WICKET` : describeRuns(runsDelta, ballSpan);
+  return wicketDelta > 0 ? `${describeRuns(runsDelta)}${runsDelta > 0 ? ", " : ""}WICKET` : describeRuns(runsDelta);
 }
 
 export function inferDeliveryUpdate(previous: CompactLiveSnapshot | undefined, current: CompactLiveSnapshot): DeliveryUpdate | null {

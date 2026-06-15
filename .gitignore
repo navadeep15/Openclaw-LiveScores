@@ -6,3 +6,6 @@ _tmp_cricbuzz_live/
 _tmp_sanweb_cricket_api/
 package/
 openclaw-*.tgz
+project-dump-for-ai.txt
+.tmp-openclaw-gateway*.log
+.npm-cache/

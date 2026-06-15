@@ -2,8 +2,24 @@
   "name": "openclaw-cricket-live-scores",
   "version": "1.0.0",
   "description": "OpenClaw plugin for IPL and cricket live ball-by-ball subscriptions over chat channels.",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "cricket",
+    "ipl",
+    "live-scores"
+  ],
   "openclaw": {
     "extensions": [
       "./dist/index.js"
@@ -20,6 +36,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "node -e \"import('node:fs').then(fs => fs.rmSync('dist', { recursive: true, force: true }))\"",
+    "prepublishOnly": "npm run build",
     "test": "vitest run --pool=threads"
   },
   "dependencies": {
