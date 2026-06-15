@@ -9,10 +9,32 @@ export function normalizeText(value: string): string {
   return cleanText(value).toLowerCase();
 }
 
+export function normalizeChatRecipient(channel: string | undefined, value: string | undefined): string {
+  const recipient = cleanText(value);
+  const channelPrefix = cleanText(channel).toLowerCase();
+
+  if (!recipient || !channelPrefix) {
+    return recipient;
+  }
+
+  const prefix = `${channelPrefix}:`;
+  return recipient.toLowerCase().startsWith(prefix) ? recipient.slice(prefix.length) : recipient;
+}
+
+function selectChatRecipient(channel: string, candidates: Array<string | undefined>): string {
+  const cleaned = candidates.map((value) => cleanText(value)).filter(Boolean);
+  if (cleaned.length === 0) {
+    return "";
+  }
+
+  const preferred = cleaned.find((value) => value.toLowerCase().startsWith(`${channel.toLowerCase()}:`));
+  return preferred ?? cleaned[0] ?? "";
+}
+
 export function buildTargetKey(target: Omit<ChatTarget, "key">): string {
   return [
     target.channel.trim().toLowerCase(),
-    target.to.trim(),
+    normalizeChatRecipient(target.channel, target.to),
     target.accountId?.trim() ?? "",
     target.threadId == null ? "" : String(target.threadId)
   ].join("|");
@@ -23,7 +45,7 @@ export function sameChatConversation(left: Pick<ChatTarget, "channel" | "to" | "
     return false;
   }
 
-  if (cleanText(left.to) !== cleanText(right.to)) {
+  if (normalizeChatRecipient(left.channel, left.to) !== normalizeChatRecipient(right.channel, right.to)) {
     return false;
   }
 
@@ -40,7 +62,7 @@ export function sameChatConversation(left: Pick<ChatTarget, "channel" | "to" | "
 
 export function resolveChatTarget(ctx: CommandContextLike): ChatTarget | null {
   const channel = cleanText(ctx.channel);
-  const to = cleanText(ctx.from) || cleanText(ctx.to) || cleanText(ctx.senderId);
+  const to = selectChatRecipient(channel, [ctx.from, ctx.to, ctx.senderId]);
 
   if (!channel || !to) {
     return null;

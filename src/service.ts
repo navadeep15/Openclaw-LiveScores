@@ -6,6 +6,7 @@ import type { CompactLiveSnapshot, CricketSubscription, MatchStatus } from "./mo
 import type { PluginApiLike, ServiceDefinitionLike } from "./openclaw.js";
 import type { CricbuzzProvider } from "./cricbuzz-provider.js";
 import type { CricketStateStore } from "./state.js";
+import { cleanText } from "./utils.js";
 
 function isDue(subscription: CricketSubscription, now: number, livePollMs: number, preMatchPollMs: number): boolean {
   const interval = subscription.status === "live" ? livePollMs : preMatchPollMs;
@@ -14,6 +15,15 @@ function isDue(subscription: CricketSubscription, now: number, livePollMs: numbe
 
 function nextStatusFromSnapshot(snapshot: CompactLiveSnapshot): MatchStatus {
   return snapshot.status;
+}
+
+function shouldIgnoreLiveRegression(subscription: CricketSubscription, snapshot: CompactLiveSnapshot): boolean {
+  const previouslyLive = subscription.status === "live" || subscription.lastSnapshot?.status === "live";
+  if (!previouslyLive || snapshot.status === "completed") {
+    return false;
+  }
+
+  return !cleanText(snapshot.liveScore);
 }
 
 async function sendText(api: PluginApiLike, subscription: CricketSubscription, text: string): Promise<void> {
@@ -72,6 +82,16 @@ export function createCricketNotifierService(api: PluginApiLike, store: CricketS
       for (const subscription of dueSubscriptions) {
         const snapshot = snapshots.get(subscription.matchId);
         if (!snapshot) {
+          continue;
+        }
+
+        if (shouldIgnoreLiveRegression(subscription, snapshot)) {
+          patches.set(subscription.id, {
+            ...subscription,
+            updatedAtMs: now,
+            lastPolledAtMs: now,
+            status: "live"
+          });
           continue;
         }
 

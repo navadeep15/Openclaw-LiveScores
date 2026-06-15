@@ -82,6 +82,18 @@ function emptyState(): PersistedState {
   };
 }
 
+function isLegacyPlaceholderSubscription(subscription: CricketSubscription): boolean {
+  if (subscription.lastSnapshot) {
+    return false;
+  }
+
+  if (!/^\d+$/.test(subscription.matchId)) {
+    return false;
+  }
+
+  return subscription.matchLabel === `Match ${subscription.matchId}`;
+}
+
 export class CricketStateStore {
   private cache: PersistedState | null = null;
   private writeQueue: Promise<void> = Promise.resolve();
@@ -161,9 +173,11 @@ export class CricketStateStore {
     const lookups = Object.fromEntries(
       Object.entries(state.lookups).filter(([, value]) => now - value.storedAtMs <= config.lookupCacheTtlMs)
     );
+    const subscriptions = state.subscriptions.filter((subscription) => !isLegacyPlaceholderSubscription(subscription));
 
     return {
       ...state,
+      subscriptions,
       lookups
     };
   }

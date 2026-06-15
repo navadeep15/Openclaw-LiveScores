@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import { inferDeliveryUpdate } from "../src/ball-delta.js";
 import { matchesQueryFilter } from "../src/cricbuzz-provider.js";
 import { formatDeliveryMessage, formatScoreSnapshot } from "../src/formatting.js";
+import { toCompactLiveSnapshot } from "../src/live-state.js";
 import type { CompactLiveSnapshot, CricketSubscription, NormalizedMatch } from "../src/models.js";
-import { sameChatConversation } from "../src/utils.js";
+import { buildTargetKey, sameChatConversation } from "../src/utils.js";
 
 function liveSnapshot(partial: Partial<CompactLiveSnapshot>): CompactLiveSnapshot {
   return {
@@ -166,7 +167,42 @@ describe("matchesQueryFilter", () => {
   });
 });
 
+describe("toCompactLiveSnapshot", () => {
+  it("parses hyphen-separated live scores from Cricbuzz", () => {
+    const snapshot = toCompactLiveSnapshot({
+      title: "Punjab Kings vs Sunrisers Hyderabad, 17th Match, Indian Premier League 2026",
+      update: "Punjab Kings need 174 runs",
+      liveScore: "PBKS 46-0 (3.1)",
+      latestCommentary: "Jaydev Unadkat to Prabhsimran Singh, SIX"
+    });
+
+    expect(snapshot.teamLabel).toBe("PBKS");
+    expect(snapshot.totalRuns).toBe(46);
+    expect(snapshot.wickets).toBe(0);
+    expect(snapshot.balls).toBe(19);
+  });
+});
+
 describe("sameChatConversation", () => {
+  it("treats prefixed and unprefixed Telegram recipients as the same chat", () => {
+    expect(
+      sameChatConversation(
+        {
+          channel: "telegram",
+          to: "telegram:5362414540",
+          accountId: "default",
+          threadId: undefined
+        },
+        {
+          channel: "telegram",
+          to: "5362414540",
+          accountId: "default",
+          threadId: undefined
+        }
+      )
+    ).toBe(true);
+  });
+
   it("matches the same chat even when the current command has no thread id", () => {
     expect(
       sameChatConversation(
@@ -203,5 +239,23 @@ describe("sameChatConversation", () => {
         }
       )
     ).toBe(false);
+  });
+
+  it("builds the same target key for prefixed and unprefixed Telegram recipients", () => {
+    expect(
+      buildTargetKey({
+        channel: "telegram",
+        to: "telegram:5362414540",
+        accountId: "default",
+        threadId: undefined
+      })
+    ).toBe(
+      buildTargetKey({
+        channel: "telegram",
+        to: "5362414540",
+        accountId: "default",
+        threadId: undefined
+      })
+    );
   });
 });

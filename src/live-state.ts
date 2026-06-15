@@ -81,7 +81,8 @@ function parseLiveScoreLine(liveScore: string): {
     return {};
   }
 
-  const scoreMatch = value.match(/^(.*?)(\d+)(?:\/(\d+))?\s*\((\d+(?:\.\d+)?)\)\s*$/);
+  // Cricbuzz has used both slash and hyphen score separators (for example 46/0 and 46-0).
+  const scoreMatch = value.match(/^(.*?)(\d+)(?:[/-](\d+))?\s*\((\d+(?:\.\d+)?)\)\s*$/);
   if (!scoreMatch) {
     return {};
   }
